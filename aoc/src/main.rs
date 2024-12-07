@@ -7,15 +7,16 @@ use std::{
 
 // pub mod problem1;
 // pub mod problem2;
-pub mod problem3;
+// pub mod problem3;
+pub mod problem4;
 
 fn main() -> io::Result<()> {
-    let f = File::open("inputs/3.txt")?;
+    let f = File::open("inputs/4.txt")?;
     let lines: Vec<String> = io::BufReader::new(f).lines().map(|l| l.unwrap()).collect();
 
-    let input = problem3::parse_lines(lines);
-    // let solution = problem3::solution(input);
-    let solution = problem3::solution_part_two(input);
+    let input = problem4::parse_lines(lines);
+    // let solution = problem4::solution(input);
+    let solution = problem4::solution_part_two(input);
 
     println!("Solution {:?}", solution);
 
