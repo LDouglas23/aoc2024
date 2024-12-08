@@ -224,8 +224,7 @@ pub fn solution_part_two(input: Input) -> usize {
             while let Some(_) = guard.step(&grid_cp) {
                 if loop_counter > 10000 {
                     println!("Hit loop limiter, x: {}, y: {}", x, y);
-                    println!("{:?}", encountered_positions);
-                    break;
+                    panic!();
                 }
 
                 let new_pos = Position::from(guard);
