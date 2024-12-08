@@ -1,7 +1,3 @@
-use std::ops::Index;
-
-use regex::Regex;
-
 type Page = usize;
 
 #[derive(Debug, Clone, Copy)]
@@ -12,17 +8,13 @@ struct Rule {
 
 impl From<String> for Rule {
     fn from(value: String) -> Self {
-        let re = Regex::new("(\\d+)\\|(\\d+)").expect("failed to compile regex");
+        let pages = value.split("|").map(String::from).collect::<Vec<String>>();
 
-        let caps = re
-            .captures(&value)
-            .expect("failed to match pattern in provided string");
-
-        let (_, [first, second]) = caps.extract();
+        assert!(pages.len() == 2);
 
         Self {
-            first: first.parse().expect("failed to parse digits"),
-            second: second.parse().expect("failed to parse digits"),
+            first: pages[0].parse().expect("failed to parse digits"),
+            second: pages[1].parse().expect("failed to parse digits"),
         }
     }
 }
