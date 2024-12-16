@@ -1,7 +1,6 @@
 use std::{
     borrow::Borrow,
-    collections::BTreeMap,
-    ffi::FromBytesUntilNulError,
+    collections::HashMap,
     fmt::{Display, Write},
 };
 
@@ -146,13 +145,13 @@ impl Span {
 #[derive(Debug, Clone, PartialEq)]
 struct ChunkMap {
     free: Vec<Span>,
-    files: BTreeMap<FileId, Span>,
+    files: HashMap<FileId, Span>,
 }
 
 impl From<&Disk> for ChunkMap {
     fn from(value: &Disk) -> Self {
         let mut free = vec![];
-        let mut files = BTreeMap::new();
+        let mut files = HashMap::new();
         let mut index = 0;
 
         for chunk in value.blocks.chunk_by(|a, b| a == b) {

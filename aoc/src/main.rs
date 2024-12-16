@@ -15,15 +15,16 @@ pub mod common;
 // pub mod problem6;
 // pub mod problem7;
 // pub mod problem8;
-pub mod problem9;
+// pub mod problem9;
+pub mod problem10;
 
 fn main() -> io::Result<()> {
-    let f = File::open("inputs/9.txt")?;
+    let f = File::open("inputs/10.txt")?;
     let lines: Vec<String> = io::BufReader::new(f).lines().map(|l| l.unwrap()).collect();
 
-    let input = problem9::Input::from(lines);
-    // let solution = problem9::solution(input);
-    let solution = problem9::solution_part_two(input);
+    let input = problem10::Input::from(lines);
+    // let solution = problem10::solution(input);
+    let solution = problem10::solution_part_two(input);
 
     println!("Solution {:?}", solution);
 

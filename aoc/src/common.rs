@@ -21,6 +21,7 @@ impl<T: CellContents + Copy> Cell<T> {
     }
 }
 
+#[derive(Debug, Copy, Clone)]
 pub enum CellType<T: CellContents + Copy> {
     Wall,
     Cell(Cell<T>),
@@ -124,6 +125,26 @@ impl<T: CellContents + Copy> Grid<T> {
     pub fn dim(&self) -> usize {
         self.dim
     }
+
+    pub fn neighbours(&self, loc: impl Into<Vector2D>) -> Vec<T> {
+        let idx = loc.into();
+
+        let neighbours = vec![
+            self.cell_from(idx, (0, -1)),
+            self.cell_from(idx, (0, 1)),
+            self.cell_from(idx, (-1, 0)),
+            self.cell_from(idx, (1, 0)),
+        ];
+
+        neighbours
+            .iter()
+            .filter_map(|c| match c {
+                CellType::Cell(contents) => Some(contents),
+                CellType::Wall => None,
+            })
+            .map(|cell| cell.contents())
+            .collect::<Vec<T>>()
+    }
 }
 
 pub struct GridIntoIterator<T: CellContents + Copy> {
@@ -181,6 +202,6 @@ impl<T: CellContents + Copy> Index<Vector2D> for Grid<T> {
         let x = idx.x;
         let y = idx.y;
 
-        &self.cells[x as usize][y as usize]
+        &self.cells[y as usize][x as usize]
     }
 }
