@@ -1,4 +1,4 @@
-use std::{collections::HashMap, vec};
+use std::collections::HashMap;
 
 #[derive(Debug)]
 pub struct Input {
@@ -61,6 +61,8 @@ type Stone = usize;
     The caches store the final length that a given stone adds to the sequence after the specified number of steps.
 
     For example, depth_cache[2] stores the map for depth 3, so each key in the map has a value that indicates the length by which the sequence will increase when that key is observed with 3 steps remaining.
+
+    This optimization cuts the runtime from billions of years down to a few milliseconds, which is a notable improvement.
 */
 
 type Cache = HashMap<Stone, Length>;
@@ -94,15 +96,15 @@ fn step(stone: Stone) -> Vec<Stone> {
     if stone == 0 {
         return vec![1];
     } else if stone.ilog10() % 2 == 1 {
-        let length = stone.ilog10() as usize + 1;
+        let length = stone.ilog10() + 1;
+
         let mut left = stone;
-        let mut right = stone;
 
         for _ in 0..(length / 2) {
             left = left / 10;
         }
 
-        right = right - left * (10 as usize).pow(length as u32 / 2);
+        let right = stone - left * (10u32).pow(length / 2) as usize;
 
         return vec![left, right];
     } else {
@@ -117,14 +119,13 @@ pub fn solution_part_two(input: Input) -> usize {
     for i in 0..75 {
         caches.push(HashMap::new());
 
-        let mut lengths = 0;
-
-        for stone in &input.stones {
-            lengths += expand(*stone, i, &mut caches);
-        }
-
-        result = lengths;
+        result = input
+            .stones
+            .iter()
+            .map(|stone| expand(*stone, i, &mut caches))
+            .sum();
     }
+
     result
 }
 
