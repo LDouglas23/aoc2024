@@ -54,14 +54,14 @@ pub fn parse_lines(lines: Vec<String>) -> Input {
         .map(|s| Rule::from(s))
         .collect();
 
-    let updates = iter.cloned().map(|s| Update::from(s)).collect();
+    let updates = iter.cloned().map(Update::from).collect();
 
     Input { rules, updates }
 }
 
 impl Update {
     fn well_ordered(&self, rules: &[Rule]) -> bool {
-        rules.iter().all(|rule| self.satisfies(rule))
+        rules.iter().all(self.satisfies)
     }
 
     fn satisfies(&self, rule: &Rule) -> bool {
