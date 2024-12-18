@@ -1,34 +1,27 @@
+use std::fmt::Debug;
 use std::ops::{Add, Index, Mul, Sub};
 
-pub trait CellContents {
-    fn from(x: usize, y: usize, c: &char) -> Self;
-}
-
 #[derive(Debug, Clone, Copy)]
-pub struct Cell<T: CellContents + Copy> {
-    x: usize,
-    y: usize,
-    contents: T,
+pub struct Cell<T> {
+    pub x: usize,
+    pub y: usize,
+    pub contents: T,
 }
 
-impl<T: CellContents + Copy> Cell<T> {
-    pub fn position(&self) -> Vector2D {
-        (self.x as i32, self.y as i32).into()
-    }
-
-    pub fn contents(&self) -> T {
-        self.contents
+impl<T: PartialEq> PartialEq for Cell<T> {
+    fn eq(&self, other: &Self) -> bool {
+        self.x == other.x && self.y == other.y && self.contents == other.contents
     }
 }
 
-#[derive(Debug, Copy, Clone)]
-pub enum CellType<T: CellContents + Copy> {
-    Wall,
-    Cell(Cell<T>),
+impl<T> Into<Vector2D> for &Cell<T> {
+    fn into(self) -> Vector2D {
+        (self.x, self.y).into()
+    }
 }
 
 #[derive(Debug, Clone)]
-pub struct Grid<T: CellContents + Copy> {
+pub struct Grid<T> {
     dim: usize,
     cells: Vec<Vec<Cell<T>>>,
 }
@@ -50,6 +43,15 @@ impl From<(i32, i32)> for Vector2D {
         Self {
             x: value.0,
             y: value.1,
+        }
+    }
+}
+
+impl From<(usize, usize)> for Vector2D {
+    fn from(value: (usize, usize)) -> Self {
+        Self {
+            x: value.0 as i32,
+            y: value.1 as i32,
         }
     }
 }
@@ -87,7 +89,47 @@ impl Mul<i32> for Vector2D {
     }
 }
 
-impl<T: CellContents + Copy> Grid<T> {
+impl<T> Grid<T> {
+    pub fn safe_index(&self, loc: impl Into<Vector2D>) -> Option<&Cell<T>> {
+        let idx = loc.into();
+
+        if idx.x < 0 || idx.y < 0 || idx.x >= self.dim as i32 || idx.y >= self.dim as i32 {
+            return None;
+        }
+
+        Some(&self[idx])
+    }
+
+    pub fn cell_from(
+        &self,
+        start: impl Into<Vector2D>,
+        delta: impl Into<Vector2D>,
+    ) -> Option<&Cell<T>> {
+        return self.safe_index(start.into() + delta.into());
+    }
+
+    pub fn dim(&self) -> usize {
+        self.dim
+    }
+
+    pub fn neighbours(&self, loc: impl Into<Vector2D>) -> Vec<&Cell<T>> {
+        let idx = loc.into();
+
+        let neighbours = vec![
+            self.cell_from(idx, (0, -1)),
+            self.cell_from(idx, (0, 1)),
+            self.cell_from(idx, (-1, 0)),
+            self.cell_from(idx, (1, 0)),
+        ];
+
+        neighbours
+            .iter()
+            .filter_map(|c| *c)
+            .collect::<Vec<&Cell<T>>>()
+    }
+}
+
+impl<T: From<char>> Grid<T> {
     pub fn new(input: Vec<Vec<char>>) -> Self {
         Self {
             dim: input.len(),
@@ -100,61 +142,65 @@ impl<T: CellContents + Copy> Grid<T> {
                         .map(|(i, c)| Cell {
                             x: i,
                             y: j,
-                            contents: T::from(i, j, c),
+                            contents: T::from(*c),
                         })
                         .collect()
                 })
                 .collect(),
         }
     }
+}
 
-    pub fn safe_index(&self, loc: impl Into<Vector2D>) -> CellType<T> {
-        let idx = loc.into();
+pub type Region<'a, T> = Vec<&'a Cell<T>>;
 
-        if idx.x < 0 || idx.y < 0 || idx.x >= self.dim as i32 || idx.y >= self.dim as i32 {
-            return CellType::Wall;
+impl<'a, T: PartialEq + Copy> Grid<T> {
+    pub fn region(&'a self, loc: impl Into<Vector2D>) -> Region<'a, T> {
+        let mut result: Vec<&Cell<T>> = vec![];
+
+        if let Some(n) = self.safe_index(loc) {
+            result.push(n);
+
+            let mut buffer: Vec<&Cell<T>> = vec![n];
+
+            while !buffer.is_empty() {
+                let n = buffer.pop().unwrap();
+                let neighbours = self.neighbours(n);
+
+                for neighbour in neighbours {
+                    if neighbour.contents == n.contents && !result.contains(&neighbour) {
+                        result.push(neighbour);
+                        buffer.push(neighbour);
+                    }
+                }
+            }
         }
 
-        CellType::Cell(self[idx])
+        result
     }
 
-    pub fn cell_from(&self, start: impl Into<Vector2D>, delta: impl Into<Vector2D>) -> CellType<T> {
-        return self.safe_index(start.into() + delta.into());
-    }
+    pub fn regions(&'a self) -> Vec<Region<'a, T>> {
+        let mut regions = vec![];
 
-    pub fn dim(&self) -> usize {
-        self.dim
-    }
+        for cell in self.clone() {
+            if regions.iter().any(|r: &Region<'a, T>| r.contains(&&cell)) {
+                continue;
+            }
 
-    pub fn neighbours(&self, loc: impl Into<Vector2D>) -> Vec<T> {
-        let idx = loc.into();
+            regions.push(self.region(&cell));
+        }
 
-        let neighbours = vec![
-            self.cell_from(idx, (0, -1)),
-            self.cell_from(idx, (0, 1)),
-            self.cell_from(idx, (-1, 0)),
-            self.cell_from(idx, (1, 0)),
-        ];
-
-        neighbours
-            .iter()
-            .filter_map(|c| match c {
-                CellType::Cell(contents) => Some(contents),
-                CellType::Wall => None,
-            })
-            .map(|cell| cell.contents())
-            .collect::<Vec<T>>()
+        regions
     }
 }
 
-pub struct GridIntoIterator<T: CellContents + Copy> {
+pub struct GridIntoIterator<T> {
     grid: Grid<T>,
     dim: usize,
     x: usize,
     y: usize,
 }
 
-impl<T: CellContents + Copy> Iterator for GridIntoIterator<T> {
+impl<T: Copy> Iterator for GridIntoIterator<T> {
     type Item = Cell<T>;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -165,7 +211,7 @@ impl<T: CellContents + Copy> Iterator for GridIntoIterator<T> {
             return None;
         };
 
-        let result = self.grid.cells[x][y];
+        let result = &self.grid.cells[x][y];
 
         y = (y + 1) % self.dim;
 
@@ -177,11 +223,11 @@ impl<T: CellContents + Copy> Iterator for GridIntoIterator<T> {
 
         self.y = y;
 
-        Some(result)
+        Some(*result)
     }
 }
 
-impl<T: CellContents + Copy> IntoIterator for Grid<T> {
+impl<T: Copy> IntoIterator for Grid<T> {
     type Item = Cell<T>;
     type IntoIter = GridIntoIterator<T>;
 
@@ -195,7 +241,7 @@ impl<T: CellContents + Copy> IntoIterator for Grid<T> {
     }
 }
 
-impl<T: CellContents + Copy> Index<Vector2D> for Grid<T> {
+impl<T> Index<Vector2D> for Grid<T> {
     type Output = Cell<T>;
 
     fn index(&self, idx: Vector2D) -> &Self::Output {
@@ -203,5 +249,13 @@ impl<T: CellContents + Copy> Index<Vector2D> for Grid<T> {
         let y = idx.y;
 
         &self.cells[y as usize][x as usize]
+    }
+}
+
+impl<T> Index<(i32, i32)> for Grid<T> {
+    type Output = Cell<T>;
+
+    fn index(&self, index: (i32, i32)) -> &Self::Output {
+        &self[Vector2D::from(index)]
     }
 }
