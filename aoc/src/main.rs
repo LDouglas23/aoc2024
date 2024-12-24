@@ -25,8 +25,8 @@ fn main() -> io::Result<()> {
     let lines: Vec<String> = io::BufReader::new(f).lines().map(|l| l.unwrap()).collect();
 
     let input = problem12::Input::from(lines);
-    let solution = problem12::solution(input);
-    // let solution = problem12::solution_part_two(input);
+    // let solution = problem12::solution(input);
+    let solution = problem12::solution_part_two(input);
 
     println!("Solution {:?}", solution);
 

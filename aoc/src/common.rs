@@ -1,22 +1,36 @@
+use std::cmp::Ordering;
 use std::fmt::Debug;
 use std::ops::{Add, Index, Mul, Sub};
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Eq)]
 pub struct Cell<T> {
     pub x: usize,
     pub y: usize,
     pub contents: T,
 }
 
-impl<T: PartialEq> PartialEq for Cell<T> {
+impl<T> PartialEq for Cell<T> {
     fn eq(&self, other: &Self) -> bool {
-        self.x == other.x && self.y == other.y && self.contents == other.contents
+        self.x == other.x && self.y == other.y
     }
 }
 
 impl<T> Into<Vector2D> for &Cell<T> {
     fn into(self) -> Vector2D {
         (self.x, self.y).into()
+    }
+}
+
+impl<T: Eq> Ord for Cell<T> {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.y.cmp(&other.y).then(self.x.cmp(&other.x))
+    }
+}
+
+impl<T: Eq> PartialOrd for Cell<T> {
+    //Row-major order
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
     }
 }
 
@@ -89,6 +103,45 @@ impl Mul<i32> for Vector2D {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum OrthoDirection {
+    N,
+    E,
+    S,
+    W,
+}
+
+impl OrthoDirection {
+    pub fn left(&self) -> Self {
+        match self {
+            OrthoDirection::N => Self::W,
+            OrthoDirection::E => Self::N,
+            OrthoDirection::S => Self::E,
+            OrthoDirection::W => Self::S,
+        }
+    }
+
+    pub fn right(&self) -> Self {
+        match self {
+            OrthoDirection::N => Self::E,
+            OrthoDirection::E => Self::S,
+            OrthoDirection::S => Self::W,
+            OrthoDirection::W => Self::N,
+        }
+    }
+}
+
+impl Into<Vector2D> for OrthoDirection {
+    fn into(self) -> Vector2D {
+        match self {
+            OrthoDirection::N => Vector2D::new(0, -1),
+            OrthoDirection::E => Vector2D::new(1, 0),
+            OrthoDirection::S => Vector2D::new(0, 1),
+            OrthoDirection::W => Vector2D::new(-1, 0),
+        }
+    }
+}
+
 impl<T> Grid<T> {
     pub fn safe_index(&self, loc: impl Into<Vector2D>) -> Option<&Cell<T>> {
         let idx = loc.into();
@@ -112,7 +165,7 @@ impl<T> Grid<T> {
         self.dim
     }
 
-    pub fn neighbours(&self, loc: impl Into<Vector2D>) -> Vec<&Cell<T>> {
+    pub fn ortho_neighbours(&self, loc: impl Into<Vector2D>) -> Vec<&Cell<T>> {
         let idx = loc.into();
 
         let neighbours = vec![
@@ -126,6 +179,10 @@ impl<T> Grid<T> {
             .iter()
             .filter_map(|c| *c)
             .collect::<Vec<&Cell<T>>>()
+    }
+
+    pub fn ortho_neighbour(&self, cell: &Cell<T>, dir: OrthoDirection) -> Option<&Cell<T>> {
+        self.cell_from((cell.x, cell.y), dir)
     }
 }
 
@@ -164,7 +221,7 @@ impl<'a, T: PartialEq + Copy> Grid<T> {
 
             while !buffer.is_empty() {
                 let n = buffer.pop().unwrap();
-                let neighbours = self.neighbours(n);
+                let neighbours = self.ortho_neighbours(n);
 
                 for neighbour in neighbours {
                     if neighbour.contents == n.contents && !result.contains(&neighbour) {
@@ -257,5 +314,38 @@ impl<T> Index<(i32, i32)> for Grid<T> {
 
     fn index(&self, index: (i32, i32)) -> &Self::Output {
         &self[Vector2D::from(index)]
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::Cell;
+
+    #[test]
+    fn test_cell_ord_and_eq() {
+        let cell1 = Cell {
+            x: 0,
+            y: 1,
+            contents: (),
+        };
+        let cell2 = Cell {
+            x: 3,
+            y: 1,
+            contents: (),
+        };
+        let cell3 = Cell {
+            x: 3,
+            y: 2,
+            contents: (),
+        };
+        let cell4 = Cell {
+            x: 3,
+            y: 2,
+            contents: (),
+        };
+
+        assert!(cell1 < cell2);
+        assert!(cell2 < cell3);
+        assert!(cell3 == cell4);
     }
 }
