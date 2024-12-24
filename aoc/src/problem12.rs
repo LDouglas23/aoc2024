@@ -1,4 +1,4 @@
-use crate::common::{Cell, Grid, OrthoDirection};
+use crate::common::{Cell, Grid, NeighbourMode, OrthoDirection, WindingMode};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct Plot {
@@ -25,7 +25,7 @@ impl Region {
         let mut perimeter = 0;
 
         for plot in &self.plots {
-            let neighbours = grid.ortho_neighbours(plot);
+            let neighbours = grid.safe_ortho_neighbours(plot);
 
             // doing this as 4 - same-type neighbours instead of just counting different-type neighbours lets us skip having to check for the edges of the grid
             perimeter += 4 - neighbours
@@ -37,7 +37,12 @@ impl Region {
         perimeter
     }
 
-    fn number_of_sides(&self, grid: &Grid<Plot>) -> usize {
+    /*
+    This method works for solid shapes with no holes, but I couldn't easily adapt it to also work
+    for shapes containing holes without being able to come up with a trivial counter-example so I
+    chose to discard it.
+    */
+    fn number_of_sides_old(&self, grid: &Grid<Plot>) -> usize {
         let mut number_of_sides = 0;
 
         /*
@@ -47,7 +52,7 @@ impl Region {
         cells.sort();
 
         let mut position = &cells[0];
-        let mut direction = OrthoDirection::E;
+        let mut direction = OrthoDirection::Right;
 
         loop {
             let left = grid.ortho_neighbour(position, direction.left());
@@ -67,12 +72,65 @@ impl Region {
             direction = direction.right();
             number_of_sides += 1;
 
-            if position == &cells[0] && direction == OrthoDirection::E {
+            if position == &cells[0] && direction == OrthoDirection::Right {
                 break;
             }
         }
 
         number_of_sides
+    }
+
+    /*
+       Corner-counting strategy
+
+       Since for any regular polygon the number of corners and the number of sides is always equal,
+       we can instead detect every cell that forms a corner with other cells and use that as the
+       result instead.
+    */
+    fn number_of_sides(&self, grid: &Grid<Plot>) -> usize {
+        let mut num_corners = 0;
+
+        for plot in &self.plots {
+            // It's important that the neighbouring cells are retrieved in order so we will make it explicit
+            let north = grid.ortho_neighbour(plot, OrthoDirection::Up);
+            let east = grid.ortho_neighbour(plot, OrthoDirection::Right);
+            let south = grid.ortho_neighbour(plot, OrthoDirection::Down);
+            let west = grid.ortho_neighbour(plot, OrthoDirection::Left);
+
+            let junctions = vec![
+                vec![north, grid.cell_from(plot, (1, -1)), east],
+                vec![east, grid.cell_from(plot, (1, 1)), south],
+                vec![south, grid.cell_from(plot, (-1, 1)), west],
+                vec![west, grid.cell_from(plot, (-1, -1)), north],
+            ];
+
+            for junction in junctions {
+                // We are only interested in cases where the neighbours in question are BOTH equal
+                // or BOTH unequal to the inspected cell. If only one is equal, then there is no
+                // corner at that junction
+
+                // If the junction plots are equal to the inspected plot, then there is only a
+                // corner in the case that the cell between the junction plots is unequal to
+                // the inspected plot. This is the most irritating corner type to detect.
+                if junction[0].is_some_and(|cell| cell.contents == plot.contents)
+                    && junction[1].is_some_and(|cell| cell.contents != plot.contents)
+                    && junction[2].is_some_and(|cell| cell.contents == plot.contents)
+                {
+                    num_corners += 1;
+                } else if (junction[0].is_none()
+                    || junction[0].is_some_and(|cell| cell.contents != plot.contents))
+                    && (junction[2].is_none()
+                        || junction[2].is_some_and(|cell| cell.contents != plot.contents))
+                {
+                    // On the other hand, if both are unequal or none then there is definitely a
+                    // corner and we can just carry on.
+
+                    num_corners += 1;
+                }
+            }
+        }
+
+        num_corners
     }
 }
 

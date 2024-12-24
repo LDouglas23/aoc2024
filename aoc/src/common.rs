@@ -15,8 +15,8 @@ impl<T> PartialEq for Cell<T> {
     }
 }
 
-impl<T> Into<Vector2D> for &Cell<T> {
-    fn into(self) -> Vector2D {
+impl<T> Into<Vector2di> for &Cell<T> {
+    fn into(self) -> Vector2di {
         (self.x, self.y).into()
     }
 }
@@ -40,19 +40,19 @@ pub struct Grid<T> {
     cells: Vec<Vec<Cell<T>>>,
 }
 
-#[derive(Debug, Copy, Clone, PartialEq)]
-pub struct Vector2D {
+#[derive(Debug, Copy, Clone, PartialEq, Default)]
+pub struct Vector2di {
     x: i32,
     y: i32,
 }
 
-impl Vector2D {
+impl Vector2di {
     pub fn new(x: i32, y: i32) -> Self {
         Self { x, y }
     }
 }
 
-impl From<(i32, i32)> for Vector2D {
+impl From<(i32, i32)> for Vector2di {
     fn from(value: (i32, i32)) -> Self {
         Self {
             x: value.0,
@@ -61,7 +61,7 @@ impl From<(i32, i32)> for Vector2D {
     }
 }
 
-impl From<(usize, usize)> for Vector2D {
+impl From<(usize, usize)> for Vector2di {
     fn from(value: (usize, usize)) -> Self {
         Self {
             x: value.0 as i32,
@@ -70,7 +70,7 @@ impl From<(usize, usize)> for Vector2D {
     }
 }
 
-impl Add for Vector2D {
+impl Add for Vector2di {
     type Output = Self;
 
     fn add(self, rhs: Self) -> Self::Output {
@@ -81,7 +81,7 @@ impl Add for Vector2D {
     }
 }
 
-impl Sub for Vector2D {
+impl Sub for Vector2di {
     type Output = Self;
 
     fn sub(self, rhs: Self) -> Self::Output {
@@ -92,7 +92,7 @@ impl Sub for Vector2D {
     }
 }
 
-impl Mul<i32> for Vector2D {
+impl Mul<i32> for Vector2di {
     type Output = Self;
 
     fn mul(self, rhs: i32) -> Self::Output {
@@ -103,47 +103,68 @@ impl Mul<i32> for Vector2D {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub enum OrthoDirection {
-    N,
-    E,
-    S,
-    W,
+    #[default]
+    Up,
+    Right,
+    Down,
+    Left,
 }
 
 impl OrthoDirection {
     pub fn left(&self) -> Self {
         match self {
-            OrthoDirection::N => Self::W,
-            OrthoDirection::E => Self::N,
-            OrthoDirection::S => Self::E,
-            OrthoDirection::W => Self::S,
+            OrthoDirection::Up => Self::Left,
+            OrthoDirection::Right => Self::Up,
+            OrthoDirection::Down => Self::Right,
+            OrthoDirection::Left => Self::Down,
         }
     }
 
     pub fn right(&self) -> Self {
         match self {
-            OrthoDirection::N => Self::E,
-            OrthoDirection::E => Self::S,
-            OrthoDirection::S => Self::W,
-            OrthoDirection::W => Self::N,
+            OrthoDirection::Up => Self::Right,
+            OrthoDirection::Right => Self::Down,
+            OrthoDirection::Down => Self::Left,
+            OrthoDirection::Left => Self::Up,
+        }
+    }
+
+    pub fn next(&self, winding_mode: &WindingMode) -> Self {
+        match winding_mode {
+            WindingMode::Clockwise => self.right(),
+            WindingMode::Anticlockwise => self.left(),
         }
     }
 }
 
-impl Into<Vector2D> for OrthoDirection {
-    fn into(self) -> Vector2D {
+impl Into<Vector2di> for OrthoDirection {
+    fn into(self) -> Vector2di {
         match self {
-            OrthoDirection::N => Vector2D::new(0, -1),
-            OrthoDirection::E => Vector2D::new(1, 0),
-            OrthoDirection::S => Vector2D::new(0, 1),
-            OrthoDirection::W => Vector2D::new(-1, 0),
+            OrthoDirection::Up => Vector2di::new(0, -1),
+            OrthoDirection::Right => Vector2di::new(1, 0),
+            OrthoDirection::Down => Vector2di::new(0, 1),
+            OrthoDirection::Left => Vector2di::new(-1, 0),
         }
     }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+pub enum WindingMode {
+    #[default]
+    Clockwise,
+    Anticlockwise,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+pub struct NeighbourMode {
+    pub start_direction: OrthoDirection,
+    pub winding_mode: WindingMode,
 }
 
 impl<T> Grid<T> {
-    pub fn safe_index(&self, loc: impl Into<Vector2D>) -> Option<&Cell<T>> {
+    pub fn safe_index(&self, loc: impl Into<Vector2di>) -> Option<&Cell<T>> {
         let idx = loc.into();
 
         if idx.x < 0 || idx.y < 0 || idx.x >= self.dim as i32 || idx.y >= self.dim as i32 {
@@ -155,8 +176,8 @@ impl<T> Grid<T> {
 
     pub fn cell_from(
         &self,
-        start: impl Into<Vector2D>,
-        delta: impl Into<Vector2D>,
+        start: impl Into<Vector2di>,
+        delta: impl Into<Vector2di>,
     ) -> Option<&Cell<T>> {
         return self.safe_index(start.into() + delta.into());
     }
@@ -165,20 +186,37 @@ impl<T> Grid<T> {
         self.dim
     }
 
-    pub fn ortho_neighbours(&self, loc: impl Into<Vector2D>) -> Vec<&Cell<T>> {
+    pub fn safe_ortho_neighbours(&self, loc: impl Into<Vector2di>) -> Vec<&Cell<T>> {
         let idx = loc.into();
 
         let neighbours = vec![
             self.cell_from(idx, (0, -1)),
+            self.cell_from(idx, (1, 0)),
             self.cell_from(idx, (0, 1)),
             self.cell_from(idx, (-1, 0)),
-            self.cell_from(idx, (1, 0)),
         ];
 
         neighbours
             .iter()
             .filter_map(|c| *c)
             .collect::<Vec<&Cell<T>>>()
+    }
+
+    pub fn ortho_neighbours(
+        &self,
+        cell: &Cell<T>,
+        pattern: NeighbourMode,
+    ) -> Vec<Option<&Cell<T>>> {
+        let mut result = vec![];
+
+        let mut direction = pattern.start_direction;
+
+        for _ in 0..4 {
+            result.push(self.ortho_neighbour(cell, direction));
+            direction = direction.next(&pattern.winding_mode);
+        }
+
+        result
     }
 
     pub fn ortho_neighbour(&self, cell: &Cell<T>, dir: OrthoDirection) -> Option<&Cell<T>> {
@@ -211,7 +249,7 @@ impl<T: From<char>> Grid<T> {
 pub type Region<'a, T> = Vec<&'a Cell<T>>;
 
 impl<'a, T: PartialEq + Copy> Grid<T> {
-    pub fn region(&'a self, loc: impl Into<Vector2D>) -> Region<'a, T> {
+    pub fn region(&'a self, loc: impl Into<Vector2di>) -> Region<'a, T> {
         let mut result: Vec<&Cell<T>> = vec![];
 
         if let Some(n) = self.safe_index(loc) {
@@ -221,7 +259,7 @@ impl<'a, T: PartialEq + Copy> Grid<T> {
 
             while !buffer.is_empty() {
                 let n = buffer.pop().unwrap();
-                let neighbours = self.ortho_neighbours(n);
+                let neighbours = self.safe_ortho_neighbours(n);
 
                 for neighbour in neighbours {
                     if neighbour.contents == n.contents && !result.contains(&neighbour) {
@@ -298,10 +336,10 @@ impl<T: Copy> IntoIterator for Grid<T> {
     }
 }
 
-impl<T> Index<Vector2D> for Grid<T> {
+impl<T> Index<Vector2di> for Grid<T> {
     type Output = Cell<T>;
 
-    fn index(&self, idx: Vector2D) -> &Self::Output {
+    fn index(&self, idx: Vector2di) -> &Self::Output {
         let x = idx.x;
         let y = idx.y;
 
@@ -313,7 +351,7 @@ impl<T> Index<(i32, i32)> for Grid<T> {
     type Output = Cell<T>;
 
     fn index(&self, index: (i32, i32)) -> &Self::Output {
-        &self[Vector2D::from(index)]
+        &self[Vector2di::from(index)]
     }
 }
 
