@@ -40,7 +40,7 @@ pub struct Grid<T> {
     cells: Vec<Vec<Cell<T>>>,
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, Default)]
+#[derive(Debug, Copy, Clone, PartialEq, Default, Eq, Hash)]
 pub struct Vector2di {
     pub x: i64,
     pub y: i64,
