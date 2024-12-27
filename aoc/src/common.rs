@@ -1,6 +1,6 @@
 use std::cmp::Ordering;
 use std::fmt::Debug;
-use std::ops::{Add, Index, Mul, Sub};
+use std::ops::{Add, Div, Index, Mul, Sub};
 
 #[derive(Debug, Clone, Copy, Eq)]
 pub struct Cell<T> {
@@ -42,18 +42,24 @@ pub struct Grid<T> {
 
 #[derive(Debug, Copy, Clone, PartialEq, Default)]
 pub struct Vector2di {
-    x: i32,
-    y: i32,
+    pub x: i64,
+    pub y: i64,
 }
 
 impl Vector2di {
-    pub fn new(x: i32, y: i32) -> Self {
+    pub fn new(x: i64, y: i64) -> Self {
         Self { x, y }
     }
 }
 
 impl From<(i32, i32)> for Vector2di {
     fn from(value: (i32, i32)) -> Self {
+        Vector2di::from((value.0 as i64, value.1 as i64))
+    }
+}
+
+impl From<(i64, i64)> for Vector2di {
+    fn from(value: (i64, i64)) -> Self {
         Self {
             x: value.0,
             y: value.1,
@@ -64,8 +70,8 @@ impl From<(i32, i32)> for Vector2di {
 impl From<(usize, usize)> for Vector2di {
     fn from(value: (usize, usize)) -> Self {
         Self {
-            x: value.0 as i32,
-            y: value.1 as i32,
+            x: value.0 as i64,
+            y: value.1 as i64,
         }
     }
 }
@@ -92,13 +98,32 @@ impl Sub for Vector2di {
     }
 }
 
-impl Mul<i32> for Vector2di {
+impl Mul<i64> for Vector2di {
     type Output = Self;
 
-    fn mul(self, rhs: i32) -> Self::Output {
+    fn mul(self, rhs: i64) -> Self::Output {
         Self {
             x: self.x * rhs,
             y: self.y * rhs,
+        }
+    }
+}
+
+impl Mul<usize> for Vector2di {
+    type Output = Self;
+
+    fn mul(self, rhs: usize) -> Self::Output {
+        self * rhs as i64
+    }
+}
+
+impl Div<Vector2di> for Vector2di {
+    type Output = Self;
+
+    fn div(self, rhs: Vector2di) -> Self::Output {
+        Self {
+            x: self.x / rhs.x,
+            y: self.y / rhs.y,
         }
     }
 }
@@ -167,7 +192,7 @@ impl<T> Grid<T> {
     pub fn safe_index(&self, loc: impl Into<Vector2di>) -> Option<&Cell<T>> {
         let idx = loc.into();
 
-        if idx.x < 0 || idx.y < 0 || idx.x >= self.dim as i32 || idx.y >= self.dim as i32 {
+        if idx.x < 0 || idx.y < 0 || idx.x >= self.dim as i64 || idx.y >= self.dim as i64 {
             return None;
         }
 
