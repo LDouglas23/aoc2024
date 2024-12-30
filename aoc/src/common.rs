@@ -1,12 +1,18 @@
 use std::cmp::Ordering;
-use std::fmt::Debug;
-use std::ops::{Add, Div, Index, Mul, Sub};
+use std::fmt::{Debug, Display, Write};
+use std::ops::{Add, Div, Index, IndexMut, Mul, Sub};
 
 #[derive(Debug, Clone, Copy, Eq)]
 pub struct Cell<T> {
     pub x: usize,
     pub y: usize,
     pub contents: T,
+}
+
+impl<T> Cell<T> {
+    fn position(&self) -> Vector2di {
+        Vector2di::new(self.x as i64, self.y as i64)
+    }
 }
 
 impl<T> PartialEq for Cell<T> {
@@ -22,13 +28,13 @@ impl<T> Into<Vector2di> for &Cell<T> {
 }
 
 impl<T: Eq> Ord for Cell<T> {
+    //Row-major order
     fn cmp(&self, other: &Self) -> Ordering {
         self.y.cmp(&other.y).then(self.x.cmp(&other.x))
     }
 }
 
 impl<T: Eq> PartialOrd for Cell<T> {
-    //Row-major order
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.cmp(other))
     }
@@ -189,7 +195,7 @@ pub struct NeighbourMode {
 }
 
 impl<T> Grid<T> {
-    pub fn safe_index(&self, loc: impl Into<Vector2di>) -> Option<&Cell<T>> {
+    pub fn get(&self, loc: impl Into<Vector2di>) -> Option<&Cell<T>> {
         let idx = loc.into();
 
         if idx.x < 0 || idx.y < 0 || idx.x >= self.dim as i64 || idx.y >= self.dim as i64 {
@@ -199,12 +205,18 @@ impl<T> Grid<T> {
         Some(&self[idx])
     }
 
-    pub fn cell_from(
-        &self,
-        start: impl Into<Vector2di>,
-        delta: impl Into<Vector2di>,
-    ) -> Option<&Cell<T>> {
-        return self.safe_index(start.into() + delta.into());
+    pub fn get_mut(&mut self, loc: impl Into<Vector2di>) -> Option<&mut Cell<T>> {
+        let idx = loc.into();
+
+        if idx.x < 0 || idx.y < 0 || idx.x >= self.dim as i64 || idx.y >= self.dim as i64 {
+            return None;
+        }
+
+        Some(&mut self[idx])
+    }
+
+    pub fn insert(&mut self, loc: impl Into<Vector2di>, value: Cell<T>) {
+        self[loc.into()] = value;
     }
 
     pub fn dim(&self) -> usize {
@@ -215,10 +227,10 @@ impl<T> Grid<T> {
         let idx = loc.into();
 
         let neighbours = vec![
-            self.cell_from(idx, (0, -1)),
-            self.cell_from(idx, (1, 0)),
-            self.cell_from(idx, (0, 1)),
-            self.cell_from(idx, (-1, 0)),
+            self.get(idx + (0, -1).into()),
+            self.get(idx + (1, 0).into()),
+            self.get(idx + (0, 1).into()),
+            self.get(idx + (-1, 0).into()),
         ];
 
         neighbours
@@ -227,30 +239,22 @@ impl<T> Grid<T> {
             .collect::<Vec<&Cell<T>>>()
     }
 
-    pub fn ortho_neighbours(
-        &self,
-        cell: &Cell<T>,
-        pattern: NeighbourMode,
-    ) -> Vec<Option<&Cell<T>>> {
+    pub fn ortho_neighbours(&self, cell: &Cell<T>, mode: NeighbourMode) -> Vec<Option<&Cell<T>>> {
         let mut result = vec![];
 
-        let mut direction = pattern.start_direction;
+        let mut direction = mode.start_direction;
 
         for _ in 0..4 {
-            result.push(self.ortho_neighbour(cell, direction));
-            direction = direction.next(&pattern.winding_mode);
+            result.push(self.get(cell.position() + direction.into()));
+            direction = direction.next(&mode.winding_mode);
         }
 
         result
     }
-
-    pub fn ortho_neighbour(&self, cell: &Cell<T>, dir: OrthoDirection) -> Option<&Cell<T>> {
-        self.cell_from((cell.x, cell.y), dir)
-    }
 }
 
-impl<T: From<char>> Grid<T> {
-    pub fn new(input: Vec<Vec<char>>) -> Self {
+impl<T: Copy> Grid<T> {
+    pub fn from(input: Vec<Vec<T>>) -> Self {
         Self {
             dim: input.len(),
             cells: input
@@ -259,14 +263,59 @@ impl<T: From<char>> Grid<T> {
                 .map(|(j, row)| {
                     row.iter()
                         .enumerate()
-                        .map(|(i, c)| Cell {
+                        .map(|(i, t)| Cell {
                             x: i,
                             y: j,
-                            contents: T::from(*c),
+                            contents: *t,
                         })
                         .collect()
                 })
                 .collect(),
+        }
+    }
+
+    /**
+    Replace the contents of the cell at the given position. Returns the original contents of the
+    cell.
+    */
+    pub fn replace(&mut self, loc: impl Into<Vector2di>, value: T) -> Option<T> {
+        let original = self.get_mut(loc.into())?;
+        let contents = original.contents;
+
+        original.contents = value;
+
+        Some(contents)
+    }
+
+    /**
+    Swap the contents of the cells at the source and destination positions. If the provided
+    positions are the same, the swap is not attempted. If either of the positions are outside the
+    boundaries of the grid, the swap is not attempted.
+     */
+    pub fn swap(
+        &mut self,
+        source: impl Into<Vector2di> + Copy,
+        destination: impl Into<Vector2di> + Copy,
+    ) {
+        if source.into() == destination.into() {
+            return;
+        }
+
+        let (t1, t2) = (self.get(source.into()), self.get(destination.into()));
+
+        if t1.is_none() || t2.is_none() {
+            return;
+        }
+
+        let t1 = t1.unwrap().contents;
+        let t2 = t2.unwrap().contents;
+
+        if let Some(c1) = self.get_mut(source.into()) {
+            c1.contents = t2;
+        }
+
+        if let Some(c2) = self.get_mut(destination.into()) {
+            c2.contents = t1;
         }
     }
 }
@@ -277,7 +326,7 @@ impl<'a, T: PartialEq + Copy> Grid<T> {
     pub fn region(&'a self, loc: impl Into<Vector2di>) -> Region<'a, T> {
         let mut result: Vec<&Cell<T>> = vec![];
 
-        if let Some(n) = self.safe_index(loc) {
+        if let Some(n) = self.get(loc) {
             result.push(n);
 
             let mut buffer: Vec<&Cell<T>> = vec![n];
@@ -377,6 +426,35 @@ impl<T> Index<(i32, i32)> for Grid<T> {
 
     fn index(&self, index: (i32, i32)) -> &Self::Output {
         &self[Vector2di::from(index)]
+    }
+}
+
+impl<T> IndexMut<Vector2di> for Grid<T> {
+    fn index_mut(&mut self, idx: Vector2di) -> &mut Self::Output {
+        let x = idx.x;
+        let y = idx.y;
+
+        &mut self.cells[y as usize][x as usize]
+    }
+}
+
+impl<T> IndexMut<(i32, i32)> for Grid<T> {
+    fn index_mut(&mut self, index: (i32, i32)) -> &mut Self::Output {
+        &mut self[Vector2di::from(index)]
+    }
+}
+
+impl<T: Copy + Into<char>> Display for Grid<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        for j in &self.cells {
+            for i in j {
+                f.write_char(i.contents.into())?;
+            }
+
+            f.write_str("\n")?;
+        }
+
+        Ok(())
     }
 }
 
